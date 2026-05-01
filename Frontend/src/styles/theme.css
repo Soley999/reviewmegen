@@ -1,0 +1,35 @@
+:root {
+  color-scheme: light;
+  font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  --font-heading: "Sora", "Segoe UI", sans-serif;
+  --bg: #eef1f7;
+  --bg-alt: #f5f7fb;
+  --surface: #ffffff;
+  --surface-2: #f2f4ff;
+  --ink: #11192b;
+  --muted: #5d677b;
+  --accent: #5c3df5;
+  --accent-2: #d97706;
+  --accent-3: #0f1b3a;
+  --highlight: #ffe1a6;
+  --border: #d6dbe7;
+  --shadow: 0 20px 45px rgba(16, 25, 43, 0.14);
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+  --hero-ink: #f7f8ff;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: radial-gradient(circle at top, rgba(92, 61, 245, 0.12), transparent 55%),
+    radial-gradient(circle at 15% 15%, rgba(244, 166, 50, 0.12), transparent 40%),
+    radial-gradient(circle at 85% 0%, rgba(63, 99, 255, 0.12), transparent 40%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
