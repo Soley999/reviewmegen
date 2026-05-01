@@ -1,6 +1,6 @@
 # ReviewMeGen
 
-> Turn any lecture file into a clean, study-ready reviewer in seconds.
+Turn any lecture file into a clean, study-ready reviewer in seconds.
 
 ![License](https://img.shields.io/badge/license-ISC-blue)
 ![Status](https://img.shields.io/badge/status-in%20development-orange)
