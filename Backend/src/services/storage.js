@@ -28,13 +28,15 @@ function ensureDb() {
   }
 }
 
-export async function createUser({ email, name, passwordHash }) {
+export async function createUser({ email, name, passwordHash, provider, providerId }) {
   ensureDb();
   const user = {
     id: nanoid(),
     email,
     name,
     passwordHash,
+    provider: provider || "email",
+    providerId: providerId || null,
     createdAt: new Date().toISOString()
   };
 

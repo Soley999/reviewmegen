@@ -13,21 +13,44 @@ export function AuthProvider({ children }) {
   });
 
   const login = async (payload) => {
-    const data = await loginUser(payload);
-    setToken(data.token);
-    setUser(data.user);
-    window.localStorage.setItem("rg_token", data.token);
-    window.localStorage.setItem("rg_user", JSON.stringify(data.user));
-    return data;
+    try {
+      const data = await loginUser(payload);
+      if (data && data.token && data.user) {
+        setToken(data.token);
+        setUser(data.user);
+        window.localStorage.setItem("rg_token", data.token);
+        window.localStorage.setItem("rg_user", JSON.stringify(data.user));
+        return data;
+      }
+      throw new Error("Invalid response from server");
+    } catch (error) {
+      console.error("Login error:", error);
+      throw error;
+    }
   };
 
   const signup = async (payload) => {
-    const data = await signupUser(payload);
-    setToken(data.token);
-    setUser(data.user);
-    window.localStorage.setItem("rg_token", data.token);
-    window.localStorage.setItem("rg_user", JSON.stringify(data.user));
-    return data;
+    try {
+      const data = await signupUser(payload);
+      if (data && data.token && data.user) {
+        setToken(data.token);
+        setUser(data.user);
+        window.localStorage.setItem("rg_token", data.token);
+        window.localStorage.setItem("rg_user", JSON.stringify(data.user));
+        return data;
+      }
+      throw new Error("Invalid response from server");
+    } catch (error) {
+      console.error("Signup error:", error);
+      throw error;
+    }
+  };
+
+  const loginWithToken = (token, user) => {
+    setToken(token);
+    setUser(user);
+    window.localStorage.setItem("rg_token", token);
+    window.localStorage.setItem("rg_user", JSON.stringify(user));
   };
 
   const logout = () => {
@@ -38,7 +61,7 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ token, user, login, signup, logout, isLoggedIn: !!token }),
+    () => ({ token, user, login, signup, loginWithToken, logout, isLoggedIn: !!token }),
     [token, user]
   );
 

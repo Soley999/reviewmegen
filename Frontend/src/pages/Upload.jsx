@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import FileDropzone from "../components/FileDropzone.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -7,6 +7,8 @@ import Section from "../components/Section.jsx";
 import { processFile } from "../api/reviewers.js";
 import { saveLastReviewer } from "../utils/storage.js";
 import { useAuth } from "../context/AuthContext.jsx";
+
+const FREE_UPLOAD_LIMIT = 3;
 
 function Upload() {
   const navigate = useNavigate();
@@ -22,11 +24,25 @@ function Upload() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
+  const [freeUploadsUsed, setFreeUploadsUsed] = useState(0);
+
+  useEffect(() => {
+    // Get free upload count from localStorage
+    const used = parseInt(localStorage.getItem("free_uploads_used") || "0");
+    setFreeUploadsUsed(used);
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
     if (!file) {
       setError("Please upload a file first.");
+      return;
+    }
+
+    // Check if user needs to login
+    if (!isLoggedIn && freeUploadsUsed >= FREE_UPLOAD_LIMIT) {
+      setError(`You've used all ${FREE_UPLOAD_LIMIT} free uploads. Please login or sign up to continue.`);
       return;
     }
 
@@ -46,6 +62,13 @@ function Upload() {
         onProgress: setProgress
       });
 
+      // Increment free upload counter for non-logged-in users
+      if (!isLoggedIn) {
+        const newCount = freeUploadsUsed + 1;
+        localStorage.setItem("free_uploads_used", newCount.toString());
+        setFreeUploadsUsed(newCount);
+      }
+
       saveLastReviewer(response.reviewer);
       navigate("/results", { state: { reviewer: response.reviewer } });
     } catch (err) {
@@ -55,6 +78,10 @@ function Upload() {
     }
   };
 
+  const remainingFreeUploads = FREE_UPLOAD_LIMIT - freeUploadsUsed;
+  const showFreeTrialNotice = !isLoggedIn && remainingFreeUploads > 0;
+  const freeTrialExpired = !isLoggedIn && remainingFreeUploads <= 0;
+
   return (
     <div>
       {loading && <LoadingOverlay progress={progress} />}
@@ -62,6 +89,17 @@ function Upload() {
         title="Upload your file"
         subtitle="Add subject tags, choose format, and let the generator do the rest."
       >
+        {showFreeTrialNotice && (
+          <div className="notice" style={{ marginBottom: "20px", backgroundColor: "#e7f3ff", borderColor: "#2196F3", color: "#0d47a1" }}>
+            🎉 <strong>Free Trial:</strong> You have {remainingFreeUploads} of {FREE_UPLOAD_LIMIT} free uploads remaining.
+            <a href="/signup" style={{ color: "#0d47a1", textDecoration: "underline", marginLeft: "5px" }}>Sign up</a> for unlimited access!
+          </div>
+        )}
+        {freeTrialExpired && (
+          <div className="notice" style={{ marginBottom: "20px", backgroundColor: "#fff3cd", borderColor: "#ffc107", color: "#856404" }}>
+            📝 You've used all {FREE_UPLOAD_LIMIT} free uploads. Please <a href="/login" style={{ color: "#856404", textDecoration: "underline" }}>login</a> or <a href="/signup" style={{ color: "#856404", textDecoration: "underline" }}>sign up</a> to continue generating reviewers.
+          </div>
+        )}
         <form className="form-grid" onSubmit={handleSubmit}>
           <FileDropzone file={file} onFileSelected={setFile} />
 
