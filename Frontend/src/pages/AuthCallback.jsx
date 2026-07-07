@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext.jsx";
 function AuthCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { login } = useAuth();
+  const { loginWithToken } = useAuth();
 
   useEffect(() => {
     const token = searchParams.get("token");
@@ -25,7 +25,7 @@ function AuthCallback() {
           email: payload.email
         };
 
-        login(token, user);
+        loginWithToken(token, user);
         navigate("/dashboard");
       } catch (err) {
         console.error("Token decode error:", err);
@@ -34,7 +34,7 @@ function AuthCallback() {
     } else {
       navigate("/login");
     }
-  }, [searchParams, navigate, login]);
+  }, [searchParams, navigate, loginWithToken]);
 
   return (
     <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
