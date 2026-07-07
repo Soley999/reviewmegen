@@ -54,25 +54,54 @@ function Dashboard() {
         <SearchBox value={query} onChange={setQuery} placeholder="Search your reviewers" />
       </div>
       <div className="card-grid">
-        {filtered.map((reviewer) => (
-          <div className="card" key={reviewer.id}>
-            <h3>{reviewer.title || reviewer.subject}</h3>
-            <p>{reviewer.subject}</p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-              {(reviewer.tags || []).map((tag) => (
-                <span className="tag" key={tag}>{tag}</span>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="button button-ghost" type="button" onClick={() => openReviewer(reviewer)}>
-                Open
-              </button>
-              <button className="button button-outline" type="button" onClick={() => deleteReviewer(reviewer.id)}>
-                Delete
-              </button>
-            </div>
+        {filtered.length === 0 ? (
+          <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px", color: "#666" }}>
+            <p>No reviewers found. Start by uploading a file!</p>
           </div>
-        ))}
+        ) : (
+          filtered.map((reviewer) => {
+            const createdDate = reviewer.createdAt ? new Date(reviewer.createdAt) : null;
+            const formattedDate = createdDate ? createdDate.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric"
+            }) : "";
+            const formattedTime = createdDate ? createdDate.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit"
+            }) : "";
+
+            return (
+              <div className="card" key={reviewer.id} style={{ position: "relative" }}>
+                <div style={{ marginBottom: "12px" }}>
+                  <h3 style={{ marginBottom: "4px" }}>{reviewer.title || reviewer.subject}</h3>
+                  {createdDate && (
+                    <p style={{ fontSize: "12px", color: "#666", margin: "0" }}>
+                      📅 {formattedDate} at {formattedTime}
+                    </p>
+                  )}
+                </div>
+                <p style={{ color: "#888", fontSize: "14px", marginBottom: "8px" }}>
+                  {reviewer.format ? `Format: ${reviewer.format}` : ""}
+                  {reviewer.difficulty ? ` • ${reviewer.difficulty}` : ""}
+                </p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                  {(reviewer.tags || []).map((tag) => (
+                    <span className="tag" key={tag}>{tag}</span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="button button-ghost" type="button" onClick={() => openReviewer(reviewer)}>
+                    Open
+                  </button>
+                  <button className="button button-outline" type="button" onClick={() => deleteReviewer(reviewer.id)}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </Section>
   );

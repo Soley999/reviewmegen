@@ -25,6 +25,12 @@ function Upload() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (!isLoggedIn) {
+      setError("Please login first to generate reviewers.");
+      return;
+    }
+
     if (!file) {
       setError("Please upload a file first.");
       return;
@@ -60,8 +66,13 @@ function Upload() {
       {loading && <LoadingOverlay progress={progress} />}
       <Section
         title="Upload your file"
-        subtitle="Add subject tags, choose format, and let the generator do the rest."
+        subtitle={isLoggedIn ? "Add subject tags, choose format, and let the generator do the rest." : "Please login to start generating reviewers."}
       >
+        {!isLoggedIn && (
+          <div className="notice" style={{ marginBottom: "20px", backgroundColor: "#fff3cd", borderColor: "#ffc107", color: "#856404" }}>
+            📝 You need to <a href="/login" style={{ color: "#856404", textDecoration: "underline" }}>login</a> or <a href="/signup" style={{ color: "#856404", textDecoration: "underline" }}>sign up</a> to upload files and generate reviewers.
+          </div>
+        )}
         <form className="form-grid" onSubmit={handleSubmit}>
           <FileDropzone file={file} onFileSelected={setFile} />
 

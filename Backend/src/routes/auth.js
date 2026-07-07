@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 import { createUser, findUserByEmail } from "../services/storage.js";
+import passport from "../services/passport.js";
+import { sendWelcomeEmail, sendLoginNotification } from "../services/emailService.js";
 
 const router = express.Router();
 
@@ -39,6 +41,9 @@ router.post("/signup", async (req, res, next) => {
     const user = await createUser({ email, name, passwordHash });
     const token = issueToken(user);
 
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail(user).catch(err => console.error("Email error:", err));
+
     return res.status(201).json({
       token,
       user: { id: user.id, email: user.email, name: user.name }
@@ -69,6 +74,10 @@ router.post("/login", async (req, res, next) => {
     }
 
     const token = issueToken(user);
+
+    // Send login notification (non-blocking)
+    sendLoginNotification(user, "email").catch(err => console.error("Email error:", err));
+
     return res.json({
       token,
       user: { id: user.id, email: user.email, name: user.name }
@@ -77,5 +86,51 @@ router.post("/login", async (req, res, next) => {
     return next(error);
   }
 });
+
+// Google OAuth routes
+router.get("/google", passport.authenticate("google", {
+  scope: ["profile", "email"],
+  session: false
+}));
+
+router.get("/google/callback",
+  passport.authenticate("google", { session: false, failureRedirect: "/login" }),
+  async (req, res) => {
+    try {
+      const token = issueToken(req.user);
+
+      // Send login notification (non-blocking)
+      sendLoginNotification(req.user, "google").catch(err => console.error("Email error:", err));
+
+      // Redirect to frontend with token
+      res.redirect(`${config.clientOrigin}/auth/callback?token=${token}`);
+    } catch (error) {
+      res.redirect(`${config.clientOrigin}/login?error=oauth_failed`);
+    }
+  }
+);
+
+// Facebook OAuth routes
+router.get("/facebook", passport.authenticate("facebook", {
+  scope: ["email"],
+  session: false
+}));
+
+router.get("/facebook/callback",
+  passport.authenticate("facebook", { session: false, failureRedirect: "/login" }),
+  async (req, res) => {
+    try {
+      const token = issueToken(req.user);
+
+      // Send login notification (non-blocking)
+      sendLoginNotification(req.user, "facebook").catch(err => console.error("Email error:", err));
+
+      // Redirect to frontend with token
+      res.redirect(`${config.clientOrigin}/auth/callback?token=${token}`);
+    } catch (error) {
+      res.redirect(`${config.clientOrigin}/login?error=oauth_failed`);
+    }
+  }
+);
 
 export default router;
