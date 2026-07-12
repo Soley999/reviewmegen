@@ -35,7 +35,7 @@ Turn any lecture file into a clean, study-ready reviewer in seconds.
 | Frontend | React + Vite |
 | Styling | Tailwind CSS |
 | Version Control | Git + GitHub |
-| Deployment | Vercel *(planned)* |
+| Deployment | Vercel |
 
 ---
 
