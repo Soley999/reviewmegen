@@ -157,3 +157,88 @@ export function firstSentenceWithTerm(sentences, term) {
     ""
   );
 }
+
+export function identifyLessons(text) {
+  const lessonPatterns = [
+    /lesson\s+(\d+)[:\s-]*(.*?)(?=\n|lesson|\d+\.|$)/gi,
+    /chapter\s+(\d+)[:\s-]*(.*?)(?=\n|chapter|\d+\.|$)/gi,
+    /topic\s+(\d+)[:\s-]*(.*?)(?=\n|topic|\d+\.|$)/gi,
+    /unit\s+(\d+)[:\s-]*(.*?)(?=\n|unit|\d+\.|$)/gi,
+    /(\d+)\.\s+([A-Z][^\n]+?)(?=\n\d+\.|\n\n|$)/g
+  ];
+
+  const lessons = [];
+  let foundPattern = false;
+
+  for (const pattern of lessonPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    if (matches.length > 0) {
+      foundPattern = true;
+      for (const match of matches) {
+        const number = parseInt(match[1]) || lessons.length + 1;
+        const title = (match[2] || `Section ${number}`).trim();
+        lessons.push({ number, title });
+      }
+      break;
+    }
+  }
+
+  if (!foundPattern || lessons.length === 0) {
+    const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 100);
+    const chunkSize = Math.max(1, Math.floor(paragraphs.length / 3));
+    for (let i = 0; i < Math.min(3, paragraphs.length); i++) {
+      lessons.push({
+        number: i + 1,
+        title: `Section ${i + 1}`
+      });
+    }
+  }
+
+  return lessons;
+}
+
+export function splitTextIntoLessons(text, lessonMarkers) {
+  if (!lessonMarkers || lessonMarkers.length === 0) {
+    return [{ number: 1, title: "Main Content", text }];
+  }
+
+  const sections = [];
+  const lines = text.split('\n');
+  let currentSection = { number: 1, title: "Introduction", text: "" };
+  let markerIndex = 0;
+
+  for (const line of lines) {
+    let foundMarker = false;
+
+    for (const marker of lessonMarkers) {
+      const lessonRegex = new RegExp(
+        `(lesson|chapter|topic|unit)\\s*${marker.number}|^${marker.number}\\.`,
+        'i'
+      );
+
+      if (lessonRegex.test(line)) {
+        if (currentSection.text.trim()) {
+          sections.push(currentSection);
+        }
+        currentSection = {
+          number: marker.number,
+          title: marker.title,
+          text: line + '\n'
+        };
+        foundMarker = true;
+        markerIndex++;
+        break;
+      }
+    }
+
+    if (!foundMarker) {
+      currentSection.text += line + '\n';
+    }
+  }
+
+  if (currentSection.text.trim()) {
+    sections.push(currentSection);
+  }
+
+  return sections.length > 0 ? sections : [{ number: 1, title: "Main Content", text }];
+}

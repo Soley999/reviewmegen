@@ -33,25 +33,30 @@ if (config.oauth.google.clientId && config.oauth.google.clientSecret) {
         try {
           const email = profile.emails?.[0]?.value;
           if (!email) {
-            return done(new Error("No email provided by Google"), null);
+            return done(new Error("No email provided by Google. Please ensure email permissions are granted."), null);
           }
 
+          const trimmedEmail = email.trim().toLowerCase();
+
           // Check if user exists
-          let user = await findUserByEmail(email);
+          let user = await findUserByEmail(trimmedEmail);
 
           if (!user) {
             // Create new user
             user = await createUser({
-              email,
+              email: trimmedEmail,
               name: profile.displayName || email.split("@")[0],
               passwordHash: nanoid(), // Random hash for OAuth users
               provider: "google",
               providerId: profile.id
             });
+          } else if (user.provider && user.provider !== "google" && user.providerId) {
+            return done(new Error(`This email is already registered with ${user.provider}. Please login using ${user.provider}.`), null);
           }
 
           return done(null, user);
         } catch (error) {
+          console.error("Google OAuth error:", error);
           return done(error, null);
         }
       }
@@ -73,25 +78,30 @@ if (config.oauth.facebook.appId && config.oauth.facebook.appSecret) {
         try {
           const email = profile.emails?.[0]?.value;
           if (!email) {
-            return done(new Error("No email provided by Facebook"), null);
+            return done(new Error("No email provided by Facebook. Please ensure email permissions are granted."), null);
           }
 
+          const trimmedEmail = email.trim().toLowerCase();
+
           // Check if user exists
-          let user = await findUserByEmail(email);
+          let user = await findUserByEmail(trimmedEmail);
 
           if (!user) {
             // Create new user
             user = await createUser({
-              email,
+              email: trimmedEmail,
               name: profile.displayName || email.split("@")[0],
               passwordHash: nanoid(), // Random hash for OAuth users
               provider: "facebook",
               providerId: profile.id
             });
+          } else if (user.provider && user.provider !== "facebook" && user.providerId) {
+            return done(new Error(`This email is already registered with ${user.provider}. Please login using ${user.provider}.`), null);
           }
 
           return done(null, user);
         } catch (error) {
+          console.error("Facebook OAuth error:", error);
           return done(error, null);
         }
       }

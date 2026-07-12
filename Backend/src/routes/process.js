@@ -19,7 +19,9 @@ const upload = multer({
       .slice(file.originalname.lastIndexOf("."))
       .toLowerCase();
     if (!allowed.includes(extension)) {
-      const error = new Error("Unsupported file type.");
+      const error = new Error(
+        `Unsupported file type: ${extension}. Allowed types: PDF, DOCX, TXT.`
+      );
       error.status = 400;
       return cb(error);
     }
@@ -44,18 +46,32 @@ function parseTags(raw) {
   return [];
 }
 
-router.post("/", optionalAuth, upload.single("file"), async (req, res, next) => {
+function handleUpload(req, res, next) {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({
+          message: `File is too large. Maximum size is ${config.maxFileSizeMb}MB.`
+        });
+      }
+      if (err.status === 400 || err.message.includes("Unsupported")) {
+        return res.status(400).json({ message: err.message });
+      }
+      return res.status(500).json({
+        message: "File upload failed. Please try again."
+      });
+    }
+    next();
+  });
+}
+
+router.post("/", optionalAuth, handleUpload, async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "File upload is required." });
     }
 
     const text = await parseFile(req.file);
-    if (!text.trim()) {
-      return res
-        .status(400)
-        .json({ message: "File has no readable text." });
-    }
 
     const options = {
       subject: req.body.subject || "General Studies",

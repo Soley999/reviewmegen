@@ -27,7 +27,6 @@ function Upload() {
   const [freeUploadsUsed, setFreeUploadsUsed] = useState(0);
 
   useEffect(() => {
-    // Get free upload count from localStorage
     const used = parseInt(localStorage.getItem("free_uploads_used") || "0");
     setFreeUploadsUsed(used);
   }, []);
@@ -40,7 +39,6 @@ function Upload() {
       return;
     }
 
-    // Check if user needs to login
     if (!isLoggedIn && freeUploadsUsed >= FREE_UPLOAD_LIMIT) {
       setError(`You've used all ${FREE_UPLOAD_LIMIT} free uploads. Please login or sign up to continue.`);
       return;
@@ -62,7 +60,6 @@ function Upload() {
         onProgress: setProgress
       });
 
-      // Increment free upload counter for non-logged-in users
       if (!isLoggedIn) {
         const newCount = freeUploadsUsed + 1;
         localStorage.setItem("free_uploads_used", newCount.toString());
@@ -72,9 +69,13 @@ function Upload() {
       saveLastReviewer(response.reviewer);
       navigate("/results", { state: { reviewer: response.reviewer } });
     } catch (err) {
-      setError(err?.response?.data?.message || "Failed to generate reviewer.");
+      const message = err?.response?.data?.message
+        || err?.message
+        || "Failed to generate reviewer. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
+      setProgress(0);
     }
   };
 
@@ -83,7 +84,7 @@ function Upload() {
   const freeTrialExpired = !isLoggedIn && remainingFreeUploads <= 0;
 
   return (
-    <div>
+    <div className="upload-page">
       {loading && <LoadingOverlay progress={progress} />}
       <Section
         title="Upload your file"
@@ -91,23 +92,24 @@ function Upload() {
       >
         {showFreeTrialNotice && (
           <div className="notice" style={{ marginBottom: "20px", backgroundColor: "#e7f3ff", borderColor: "#2196F3", color: "#0d47a1" }}>
-            🎉 <strong>Free Trial:</strong> You have {remainingFreeUploads} of {FREE_UPLOAD_LIMIT} free uploads remaining.
+            <strong>Free Trial:</strong> You have {remainingFreeUploads} of {FREE_UPLOAD_LIMIT} free uploads remaining.
             <a href="/signup" style={{ color: "#0d47a1", textDecoration: "underline", marginLeft: "5px" }}>Sign up</a> for unlimited access!
           </div>
         )}
         {freeTrialExpired && (
           <div className="notice" style={{ marginBottom: "20px", backgroundColor: "#fff3cd", borderColor: "#ffc107", color: "#856404" }}>
-            📝 You've used all {FREE_UPLOAD_LIMIT} free uploads. Please <a href="/login" style={{ color: "#856404", textDecoration: "underline" }}>login</a> or <a href="/signup" style={{ color: "#856404", textDecoration: "underline" }}>sign up</a> to continue generating reviewers.
+            You've used all {FREE_UPLOAD_LIMIT} free uploads. Please <a href="/login" style={{ color: "#856404", textDecoration: "underline" }}>login</a> or <a href="/signup" style={{ color: "#856404", textDecoration: "underline" }}>sign up</a> to continue generating reviewers.
           </div>
         )}
-        <form className="form-grid" onSubmit={handleSubmit}>
-          <FileDropzone file={file} onFileSelected={setFile} />
+        <form className="upload-form" onSubmit={handleSubmit}>
+          <FileDropzone file={file} onFileSelected={setFile} disabled={loading} />
 
           <input
             className="input"
             placeholder="Subject or course (e.g., Biology 101)"
             value={subject}
             onChange={(event) => setSubject(event.target.value)}
+            disabled={loading}
           />
 
           <TagInput tags={tags} setTags={setTags} />
@@ -120,6 +122,7 @@ function Upload() {
                 className="select"
                 value={format}
                 onChange={(event) => setFormat(event.target.value)}
+                disabled={loading}
               >
                 <option value="flashcards">Flashcards</option>
                 <option value="qa">Q&A reviewer</option>
@@ -133,6 +136,7 @@ function Upload() {
                 className="select"
                 value={difficulty}
                 onChange={(event) => setDifficulty(event.target.value)}
+                disabled={loading}
               >
                 <option value="easy">Easy</option>
                 <option value="medium">Medium</option>
@@ -146,6 +150,7 @@ function Upload() {
                 className="select"
                 value={language}
                 onChange={(event) => setLanguage(event.target.value)}
+                disabled={loading}
               >
                 <option value="English">English</option>
                 <option value="Tagalog">Tagalog</option>
@@ -159,15 +164,25 @@ function Upload() {
                 type="checkbox"
                 checked={saveToDashboard}
                 onChange={(event) => setSaveToDashboard(event.target.checked)}
+                disabled={loading}
               />
               Save to dashboard
             </label>
           )}
 
-          {error && <div className="notice">{error}</div>}
+          {error && (
+            <div className="notice" style={{ backgroundColor: "#fee", borderColor: "#fcc", color: "#c62828" }}>
+              {error}
+            </div>
+          )}
 
-          <button className="button button-primary" type="submit">
-            Generate Reviewer
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={loading || (!file)}
+            style={{ opacity: loading || !file ? 0.6 : 1 }}
+          >
+            {loading ? "Generating..." : "Generate Reviewer"}
           </button>
         </form>
       </Section>

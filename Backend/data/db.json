@@ -1,4 +1,14 @@
 {
-  "users": [],
+  "users": [
+    {
+      "id": "jquigKmRgBUcZSNvw1n-i",
+      "email": "test@example.com",
+      "name": "Test User",
+      "passwordHash": "$2a$10$sXPdINL1dj2YVM2jOt7kJu4qmnNq8ey6KPpdV3a48f/cAkor5zs7m",
+      "provider": "email",
+      "providerId": null,
+      "createdAt": "2026-07-12T16:18:15.244Z"
+    }
+  ],
   "reviewers": []
 }

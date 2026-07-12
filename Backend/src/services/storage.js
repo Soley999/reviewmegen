@@ -48,7 +48,8 @@ export async function createUser({ email, name, passwordHash, provider, provider
 export async function findUserByEmail(email) {
   ensureDb();
   await db.read();
-  return db.data.users.find((user) => user.email === email) || null;
+  const normalizedEmail = email.trim().toLowerCase();
+  return db.data.users.find((user) => user.email.toLowerCase() === normalizedEmail) || null;
 }
 
 export async function getUserById(id) {
