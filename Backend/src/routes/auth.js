@@ -26,19 +26,35 @@ router.post("/signup", async (req, res, next) => {
         .json({ message: "Name, email, and password are required." });
     }
 
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (trimmedName.length < 2) {
+      return res
+        .status(400)
+        .json({ message: "Name must be at least 2 characters long." });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      return res
+        .status(400)
+        .json({ message: "Please provide a valid email address." });
+    }
+
     if (password.length < 6) {
       return res
         .status(400)
-        .json({ message: "Password must be at least 6 characters." });
+        .json({ message: "Password must be at least 6 characters long." });
     }
 
-    const existing = await findUserByEmail(email);
+    const existing = await findUserByEmail(trimmedEmail);
     if (existing) {
-      return res.status(409).json({ message: "Email already registered." });
+      return res.status(409).json({ message: "This email is already registered. Please login instead." });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await createUser({ email, name, passwordHash });
+    const user = await createUser({ email: trimmedEmail, name: trimmedName, passwordHash });
     const token = issueToken(user);
 
     // Send welcome email (non-blocking)
@@ -49,6 +65,7 @@ router.post("/signup", async (req, res, next) => {
       user: { id: user.id, email: user.email, name: user.name }
     });
   } catch (error) {
+    console.error("Signup error:", error);
     return next(error);
   }
 });
@@ -63,14 +80,23 @@ router.post("/login", async (req, res, next) => {
         .json({ message: "Email and password are required." });
     }
 
-    const user = await findUserByEmail(email);
+    const trimmedEmail = email.trim().toLowerCase();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      return res
+        .status(400)
+        .json({ message: "Please provide a valid email address." });
+    }
+
+    const user = await findUserByEmail(trimmedEmail);
     if (!user) {
-      return res.status(401).json({ message: "Invalid credentials." });
+      return res.status(401).json({ message: "Invalid email or password." });
     }
 
     const matches = await bcrypt.compare(password, user.passwordHash);
     if (!matches) {
-      return res.status(401).json({ message: "Invalid credentials." });
+      return res.status(401).json({ message: "Invalid email or password." });
     }
 
     const token = issueToken(user);
@@ -83,6 +109,7 @@ router.post("/login", async (req, res, next) => {
       user: { id: user.id, email: user.email, name: user.name }
     });
   } catch (error) {
+    console.error("Login error:", error);
     return next(error);
   }
 });

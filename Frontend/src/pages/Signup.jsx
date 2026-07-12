@@ -5,6 +5,34 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
+const validateEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const checkPasswordStrength = (password) => {
+  if (password.length < 6) {
+    return { valid: false, message: "Password must be at least 6 characters long." };
+  }
+  if (password.length < 8) {
+    return { valid: true, strength: "weak", message: "Weak password. Consider using 8+ characters." };
+  }
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+  const strengthCount = [hasUpper, hasLower, hasNumber, hasSpecial].filter(Boolean).length;
+
+  if (strengthCount >= 3 && password.length >= 8) {
+    return { valid: true, strength: "strong", message: "Strong password!" };
+  } else if (strengthCount >= 2) {
+    return { valid: true, strength: "medium", message: "Medium strength password." };
+  } else {
+    return { valid: true, strength: "weak", message: "Weak password. Add numbers and symbols." };
+  }
+};
+
 function Signup() {
   const { signup } = useAuth();
   const navigate = useNavigate();
@@ -12,15 +40,57 @@ function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [passwordStrength, setPasswordStrength] = useState(null);
+
+  const handlePasswordChange = (value) => {
+    setPassword(value);
+    if (value) {
+      setPasswordStrength(checkPasswordStrength(value));
+    } else {
+      setPasswordStrength(null);
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+
+    if (!name.trim()) {
+      setError("Name is required.");
+      return;
+    }
+
+    if (name.trim().length < 2) {
+      setError("Name must be at least 2 characters long.");
+      return;
+    }
+
+    if (!email.trim()) {
+      setError("Email is required.");
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!password) {
+      setError("Password is required.");
+      return;
+    }
+
+    const pwdCheck = checkPasswordStrength(password);
+    if (!pwdCheck.valid) {
+      setError(pwdCheck.message);
+      return;
+    }
+
     try {
-      await signup({ name, email, password });
+      await signup({ name: name.trim(), email: email.trim(), password });
       navigate("/dashboard");
     } catch (err) {
-      setError(err?.response?.data?.message || "Signup failed.");
+      setError(err?.response?.data?.message || "Signup failed. Please try again.");
     }
   };
 
@@ -44,10 +114,40 @@ function Signup() {
         <input
           className="input"
           type="password"
-          placeholder="Password"
+          placeholder="Password (min. 6 characters)"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={(event) => handlePasswordChange(event.target.value)}
         />
+        {passwordStrength && (
+          <div
+            style={{
+              padding: "8px 12px",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+              backgroundColor:
+                passwordStrength.strength === "strong"
+                  ? "#d4edda"
+                  : passwordStrength.strength === "medium"
+                  ? "#fff3cd"
+                  : "#f8d7da",
+              color:
+                passwordStrength.strength === "strong"
+                  ? "#155724"
+                  : passwordStrength.strength === "medium"
+                  ? "#856404"
+                  : "#721c24",
+              border: `1px solid ${
+                passwordStrength.strength === "strong"
+                  ? "#c3e6cb"
+                  : passwordStrength.strength === "medium"
+                  ? "#ffeeba"
+                  : "#f5c6cb"
+              }`
+            }}
+          >
+            {passwordStrength.message}
+          </div>
+        )}
         {error && <div className="notice">{error}</div>}
         <button className="button button-primary" type="submit">
           Sign up

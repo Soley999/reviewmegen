@@ -8,6 +8,8 @@ import QAReviewer from "../components/QAReviewer.jsx";
 import Outline from "../components/Outline.jsx";
 import SearchBox from "../components/SearchBox.jsx";
 import Section from "../components/Section.jsx";
+import LessonDisplay from "../components/LessonDisplay.jsx";
+import FinalExam from "../components/FinalExam.jsx";
 import { getLastReviewer, saveLastReviewer } from "../utils/storage.js";
 
 function Results() {
@@ -61,6 +63,8 @@ function Results() {
     pdf.save("reviewer.pdf");
   };
 
+  const hasLessons = reviewer.lessons && reviewer.lessons.length > 0;
+
   return (
     <div>
       {reviewer.warnings?.length ? (
@@ -75,6 +79,7 @@ function Results() {
         <div className="section-title">{reviewer.title || reviewer.subject}</div>
         <p className="section-subtitle">
           {reviewer.subject} · {reviewer.difficulty} · {reviewer.languageUsed}
+          {hasLessons && <> · {reviewer.lessons.length} Lesson{reviewer.lessons.length !== 1 ? 's' : ''}</>}
         </p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
           <button className="button button-primary" type="button" onClick={handleDownload}>
@@ -85,6 +90,36 @@ function Results() {
       </div>
 
       <div id="reviewer-print">
+        {reviewer.tableOfContents && reviewer.tableOfContents.length > 0 && (
+          <div className="card" style={{ marginBottom: "24px" }}>
+            <h3>Table of Contents</h3>
+            <ol style={{ lineHeight: "1.8" }}>
+              {reviewer.tableOfContents.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {hasLessons && (
+          <Section title="Lessons" subtitle="Structured learning content with assessments">
+            {reviewer.lessons.map((lesson) => (
+              <LessonDisplay
+                key={lesson.lessonNumber}
+                lesson={lesson}
+                highlightTerms={highlightTerms}
+                query={query}
+              />
+            ))}
+          </Section>
+        )}
+
+        {reviewer.finalExam && (
+          <Section title="" subtitle="">
+            <FinalExam finalExam={reviewer.finalExam} />
+          </Section>
+        )}
+
         <div className="results-grid">
           <div className="card">
             <h3>Short Summary</h3>

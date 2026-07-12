@@ -5,22 +5,43 @@ import { useAuth } from "../context/AuthContext.jsx";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
+const validateEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(searchParams.get("error") || "");
+  const [error, setError] = useState(searchParams.get("error") === "oauth_failed" ? "OAuth authentication failed. Please try again." : "");
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+
+    if (!email.trim()) {
+      setError("Email is required.");
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!password) {
+      setError("Password is required.");
+      return;
+    }
+
     try {
-      await login({ email, password });
+      await login({ email: email.trim(), password });
       navigate("/dashboard");
     } catch (err) {
-      setError(err?.response?.data?.message || "Login failed.");
+      setError(err?.response?.data?.message || "Login failed. Please check your credentials.");
     }
   };
 
