@@ -5,9 +5,6 @@ import Home from "./pages/Home.jsx";
 import Upload from "./pages/Upload.jsx";
 import Results from "./pages/Results.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
-import Login from "./pages/Login.jsx";
-import Signup from "./pages/Signup.jsx";
-import AuthCallback from "./pages/AuthCallback.jsx";
 
 function App() {
   return (
@@ -19,9 +16,6 @@ function App() {
           <Route path="/upload" element={<Upload />} />
           <Route path="/results" element={<Results />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
         </Routes>
       </main>
       <Footer />

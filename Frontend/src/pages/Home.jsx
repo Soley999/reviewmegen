@@ -14,19 +14,11 @@ function Home() {
           </p>
           <div className="hero-actions">
             <Link className="button button-primary" to="/upload">
-              Start for free
+              Get started — it&apos;s free
             </Link>
             <Link className="button button-outline" to="/dashboard">
-              View dashboard
+              View last reviewer
             </Link>
-          </div>
-          <div className="hero-proof">
-            <div className="proof-line">Trusted by 10,000+ students. 4.9/5 average rating.</div>
-            <div className="proof-logos">
-              <span className="logo-badge">North State</span>
-              <span className="logo-badge">Summit Tech</span>
-              <span className="logo-badge">City U</span>
-            </div>
           </div>
         </div>
         <div className="hero-preview stagger" id="hero-sample">
@@ -59,7 +51,7 @@ function Home() {
           </div>
           <div className="card">
             <h3>Study the way you like</h3>
-            <p>Switch between flashcards, Q&A, or outline style reviewers.</p>
+            <p>Switch between flashcards, Q&amp;A, or outline style reviewers.</p>
           </div>
           <div className="card">
             <h3>Search inside reviewers</h3>
@@ -86,7 +78,7 @@ function Home() {
           <div className="step">
             <div className="step-index">03</div>
             <h3 className="step-title">Study</h3>
-            <p>Download a PDF or save it for later review.</p>
+            <p>Download a PDF or come back anytime via the Dashboard.</p>
           </div>
         </div>
       </Section>
