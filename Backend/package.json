@@ -10,11 +10,12 @@
     "generate:samples": "node scripts/generate-samples.js"
   },
   "dependencies": {
-    "axios": "^1.7.7",
+    "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.1",
+    "groq-sdk": "^1.6.0",
     "helmet": "^7.1.0",
     "mammoth": "^1.7.1",
     "morgan": "^1.10.0",

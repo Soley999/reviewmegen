@@ -6,22 +6,24 @@ import { generateReviewer } from "../services/reviewerGenerator.js";
 
 const router = express.Router();
 
+const ALLOWED_EXTENSIONS = new Set([
+  ".pdf", ".docx", ".txt",
+  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff"
+]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: config.maxFileSizeMb * 1024 * 1024
-  },
+  limits: { fileSize: config.maxFileSizeMb * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = [".pdf", ".docx", ".txt"];
-    const extension = file.originalname
+    const ext = file.originalname
       .slice(file.originalname.lastIndexOf("."))
       .toLowerCase();
-    if (!allowed.includes(extension)) {
-      const error = new Error(
-        `Unsupported file type: ${extension}. Allowed types: PDF, DOCX, TXT.`
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      const err = new Error(
+        `Unsupported file type: ${ext}. Allowed: PDF, DOCX, TXT, JPG, PNG, GIF, WEBP.`
       );
-      error.status = 400;
-      return cb(error);
+      err.status = 400;
+      return cb(err);
     }
     return cb(null, true);
   }
@@ -34,11 +36,8 @@ function parseTags(raw) {
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
-    } catch (error) {
-      return raw
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean);
+    } catch {
+      return raw.split(",").map((t) => t.trim()).filter(Boolean);
     }
   }
   return [];
@@ -52,12 +51,10 @@ function handleUpload(req, res, next) {
           message: `File is too large. Maximum size is ${config.maxFileSizeMb}MB.`
         });
       }
-      if (err.status === 400 || err.message.includes("Unsupported")) {
+      if (err.status === 400 || err.message?.includes("Unsupported")) {
         return res.status(400).json({ message: err.message });
       }
-      return res.status(500).json({
-        message: "File upload failed. Please try again."
-      });
+      return res.status(500).json({ message: "File upload failed. Please try again." });
     }
     next();
   });
@@ -71,19 +68,27 @@ router.post("/", handleUpload, async (req, res, next) => {
 
     const text = await parseFile(req.file);
 
+    // Parse exam options
+    const examEnabled = req.body.examEnabled === "true";
+    const examCount = Math.min(
+      100,
+      Math.max(5, parseInt(req.body.examCount, 10) || 20)
+    );
+
+    // Parse flashcard option
+    const flashcardsEnabled = req.body.flashcardsEnabled !== "false"; // default true
+
     const options = {
       subject: req.body.subject || "General Studies",
       tags: parseTags(req.body.tags),
-      format: req.body.format || "flashcards",
       difficulty: req.body.difficulty || "medium",
-      language: req.body.language || "English"
+      language: req.body.language || "English",
+      examEnabled,
+      examCount,
+      flashcardsEnabled
     };
 
-    const reviewer = await generateReviewer({
-      text,
-      options,
-      file: req.file
-    });
+    const reviewer = await generateReviewer({ text, options, file: req.file });
 
     return res.json({ reviewer });
   } catch (error) {

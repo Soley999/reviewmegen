@@ -242,3 +242,47 @@ export function splitTextIntoLessons(text, lessonMarkers) {
 
   return sections.length > 0 ? sections : [{ number: 1, title: "Main Content", text }];
 }
+
+/**
+ * Extract (term, definition) pairs from sentences that follow definition patterns
+ * such as "X is ...", "X refers to ...", "X means ...", "X: ...", "X — ..."
+ *
+ * Returns an array of { term, definition } objects derived strictly from the text.
+ * This avoids the frequency-based "top words" approach which picks noise words.
+ */
+export function extractDefinitionSentences(text) {
+  const pairs = [];
+  const seen = new Set();
+
+  // Pattern 1: "Term is/are/was/refers to/means/defined as ..."
+  // Term must be 2–5 words (not a long phrase grabbed across a line boundary)
+  const isPattern = /\b([A-Z][a-z]+(?:\s+[A-Za-z]+){0,3})\s+(?:is|are|was|were|refers to|means|is defined as|can be defined as|is described as)\s+([^.!?\n]{15,200}[.!?])/g;
+
+  // Pattern 2: "Term: definition" or "Term — definition" on a single line
+  // Term must start with a capital and be 2–40 chars
+  const colonPattern = /^([A-Z][A-Za-z]{1,39}(?:\s+[A-Za-z]+){0,2})\s*[:\u2014\u2013]\s*([^.!?\n]{15,200}[.!?]?)\s*$/gm;
+
+  for (const pattern of [isPattern, colonPattern]) {
+    let match;
+    // reset lastIndex
+    pattern.lastIndex = 0;
+    while ((match = pattern.exec(text)) !== null) {
+      const term = match[1].trim().replace(/\s+/g, " ");
+      const definition = match[2].trim().replace(/\s+/g, " ");
+
+      // Skip terms that are too short, too long, or all-caps abbreviations (likely headings)
+      if (term.length < 3 || term.length > 60) continue;
+      if (/^[A-Z\s]+$/.test(term) && term.length > 8) continue; // all-caps heading
+      if (definition.length < 10) continue;
+
+      const key = term.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        pairs.push({ term, definition });
+      }
+    }
+  }
+
+  return pairs;
+}
+
