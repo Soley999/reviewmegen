@@ -5,29 +5,26 @@ dotenv.config();
 export const config = {
   port: Number(process.env.PORT || 4000),
   clientOrigin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
-  jwtSecret: process.env.JWT_SECRET || "dev-secret",
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 200),
-  maxTextChars: Number(process.env.MAX_TEXT_CHARS || 200000),
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY || "",
-    baseUrl: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini"
+
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    // Full model path as returned by the ListModels API (models/... prefix required
+    // for models not yet promoted to the default v1beta namespace).
+    model: process.env.GEMINI_MODEL || "models/gemini-3.5-flash"
   },
-  oauth: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-      callbackURL: process.env.GOOGLE_CALLBACK_URL || "/api/auth/google/callback"
-    },
-    facebook: {
-      appId: process.env.FACEBOOK_APP_ID || "",
-      appSecret: process.env.FACEBOOK_APP_SECRET || "",
-      callbackURL: process.env.FACEBOOK_CALLBACK_URL || "/api/auth/facebook/callback"
-    }
+
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || "",
+    model: process.env.GROQ_MODEL || "qwen/qwen3.8-27b"
   },
-  email: {
-    enabled: process.env.EMAIL_NOTIFICATIONS_ENABLED === "true",
-    from: process.env.EMAIL_FROM || "noreply@reviewmegen.com"
-  }
+
+  // Safe per-call character limit — Gemini 1.5 Flash has 1M token context but
+  // we cap the content portion at ~60K chars (~15K tokens) so the full prompt +
+  // output fits comfortably within limits and avoids high latency.
+  // For large files we chunk and make multiple calls.
+  maxCharsPerChunk: Number(process.env.MAX_CHARS_PER_CHUNK || 60000),
+
+  // If the full text exceeds this, use chunked processing
+  chunkingThreshold: Number(process.env.CHUNKING_THRESHOLD || 60000)
 };

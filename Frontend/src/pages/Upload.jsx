@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FileDropzone from "../components/FileDropzone.jsx";
 import LoadingOverlay from "../components/LoadingOverlay.jsx";
@@ -6,41 +6,29 @@ import TagInput from "../components/TagInput.jsx";
 import Section from "../components/Section.jsx";
 import { processFile } from "../api/reviewers.js";
 import { saveLastReviewer } from "../utils/storage.js";
-import { useAuth } from "../context/AuthContext.jsx";
-
-const FREE_UPLOAD_LIMIT = 3;
 
 function Upload() {
   const navigate = useNavigate();
-  const { isLoggedIn } = useAuth();
 
   const [file, setFile] = useState(null);
   const [subject, setSubject] = useState("");
   const [tags, setTags] = useState([]);
-  const [format, setFormat] = useState("flashcards");
   const [difficulty, setDifficulty] = useState("medium");
   const [language, setLanguage] = useState("English");
-  const [saveToDashboard, setSaveToDashboard] = useState(true);
+
+  const [examEnabled, setExamEnabled] = useState(false);
+  const [examCount, setExamCount] = useState(20);
+  const [flashcardsEnabled, setFlashcardsEnabled] = useState(true);
+
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
-  const [freeUploadsUsed, setFreeUploadsUsed] = useState(0);
-
-  useEffect(() => {
-    const used = parseInt(localStorage.getItem("free_uploads_used") || "0");
-    setFreeUploadsUsed(used);
-  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
     if (!file) {
       setError("Please upload a file first.");
-      return;
-    }
-
-    if (!isLoggedIn && freeUploadsUsed >= FREE_UPLOAD_LIMIT) {
-      setError(`You've used all ${FREE_UPLOAD_LIMIT} free uploads. Please login or sign up to continue.`);
       return;
     }
 
@@ -53,25 +41,21 @@ function Upload() {
         file,
         subject,
         tags,
-        format,
         difficulty,
         language,
-        save: isLoggedIn && saveToDashboard,
+        examEnabled,
+        examCount,
+        flashcardsEnabled,
         onProgress: setProgress
       });
-
-      if (!isLoggedIn) {
-        const newCount = freeUploadsUsed + 1;
-        localStorage.setItem("free_uploads_used", newCount.toString());
-        setFreeUploadsUsed(newCount);
-      }
 
       saveLastReviewer(response.reviewer);
       navigate("/results", { state: { reviewer: response.reviewer } });
     } catch (err) {
-      const message = err?.response?.data?.message
-        || err?.message
-        || "Failed to generate reviewer. Please try again.";
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to generate reviewer. Please try again.";
       setError(message);
     } finally {
       setLoading(false);
@@ -79,28 +63,13 @@ function Upload() {
     }
   };
 
-  const remainingFreeUploads = FREE_UPLOAD_LIMIT - freeUploadsUsed;
-  const showFreeTrialNotice = !isLoggedIn && remainingFreeUploads > 0;
-  const freeTrialExpired = !isLoggedIn && remainingFreeUploads <= 0;
-
   return (
     <div className="upload-page">
       {loading && <LoadingOverlay progress={progress} />}
       <Section
         title="Upload your file"
-        subtitle="Add subject tags, choose format, and let the generator do the rest."
+        subtitle="Add subject tags, choose your options, and generate your reviewer."
       >
-        {showFreeTrialNotice && (
-          <div className="notice" style={{ marginBottom: "20px", backgroundColor: "#e7f3ff", borderColor: "#2196F3", color: "#0d47a1" }}>
-            <strong>Free Trial:</strong> You have {remainingFreeUploads} of {FREE_UPLOAD_LIMIT} free uploads remaining.
-            <a href="/signup" style={{ color: "#0d47a1", textDecoration: "underline", marginLeft: "5px" }}>Sign up</a> for unlimited access!
-          </div>
-        )}
-        {freeTrialExpired && (
-          <div className="notice" style={{ marginBottom: "20px", backgroundColor: "#fff3cd", borderColor: "#ffc107", color: "#856404" }}>
-            You've used all {FREE_UPLOAD_LIMIT} free uploads. Please <a href="/login" style={{ color: "#856404", textDecoration: "underline" }}>login</a> or <a href="/signup" style={{ color: "#856404", textDecoration: "underline" }}>sign up</a> to continue generating reviewers.
-          </div>
-        )}
         <form className="upload-form" onSubmit={handleSubmit}>
           <FileDropzone file={file} onFileSelected={setFile} disabled={loading} />
 
@@ -108,34 +77,20 @@ function Upload() {
             className="input"
             placeholder="Subject or course (e.g., Biology 101)"
             value={subject}
-            onChange={(event) => setSubject(event.target.value)}
+            onChange={(e) => setSubject(e.target.value)}
             disabled={loading}
           />
 
           <TagInput tags={tags} setTags={setTags} />
 
-          <div className="card-grid">
-            <div>
-              <label htmlFor="format">Output format</label>
-              <select
-                id="format"
-                className="select"
-                value={format}
-                onChange={(event) => setFormat(event.target.value)}
-                disabled={loading}
-              >
-                <option value="flashcards">Flashcards</option>
-                <option value="qa">Q&A reviewer</option>
-                <option value="outline">Outline format</option>
-              </select>
-            </div>
+          <div className="card-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <div>
               <label htmlFor="difficulty">Difficulty</label>
               <select
                 id="difficulty"
                 className="select"
                 value={difficulty}
-                onChange={(event) => setDifficulty(event.target.value)}
+                onChange={(e) => setDifficulty(e.target.value)}
                 disabled={loading}
               >
                 <option value="easy">Easy</option>
@@ -149,7 +104,7 @@ function Upload() {
                 id="language"
                 className="select"
                 value={language}
-                onChange={(event) => setLanguage(event.target.value)}
+                onChange={(e) => setLanguage(e.target.value)}
                 disabled={loading}
               >
                 <option value="English">English</option>
@@ -158,17 +113,62 @@ function Upload() {
             </div>
           </div>
 
-          {isLoggedIn && (
-            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* ── Generate options ────────────────────────────────── */}
+          <div className="card" style={{ padding: "18px 20px" }}>
+            <h3 style={{ margin: "0 0 14px", fontSize: "1rem" }}>What to generate</h3>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, cursor: "pointer" }}>
               <input
                 type="checkbox"
-                checked={saveToDashboard}
-                onChange={(event) => setSaveToDashboard(event.target.checked)}
+                checked={flashcardsEnabled}
+                onChange={(e) => setFlashcardsEnabled(e.target.checked)}
                 disabled={loading}
+                style={{ width: 16, height: 16 }}
               />
-              Save to dashboard
+              <span>
+                <strong>Flashcards</strong>
+                <span style={{ color: "var(--muted)", fontSize: "0.88rem", marginLeft: 6 }}>
+                  — auto-generated from key concepts, each with a rationale
+                </span>
+              </span>
             </label>
-          )}
+
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={examEnabled}
+                onChange={(e) => setExamEnabled(e.target.checked)}
+                disabled={loading}
+                style={{ width: 16, height: 16, marginTop: 3 }}
+              />
+              <div style={{ flex: 1 }}>
+                <span>
+                  <strong>Exam</strong>
+                  <span style={{ color: "var(--muted)", fontSize: "0.88rem", marginLeft: 6 }}>
+                    — interactive multiple-choice with score &amp; per-answer feedback
+                  </span>
+                </span>
+                {examEnabled && (
+                  <div style={{ marginTop: 10 }}>
+                    <label htmlFor="examCount" style={{ fontSize: "0.9rem", color: "var(--muted)", display: "block", marginBottom: 4 }}>
+                      Number of exam questions
+                    </label>
+                    <input
+                      id="examCount"
+                      type="number"
+                      className="input"
+                      min={5}
+                      max={100}
+                      value={examCount}
+                      onChange={(e) => setExamCount(Math.max(5, Math.min(100, parseInt(e.target.value, 10) || 20)))}
+                      disabled={loading}
+                      style={{ width: 120 }}
+                    />
+                  </div>
+                )}
+              </div>
+            </label>
+          </div>
 
           {error && (
             <div className="notice" style={{ backgroundColor: "#fee", borderColor: "#fcc", color: "#c62828" }}>
@@ -179,10 +179,10 @@ function Upload() {
           <button
             className="button button-primary"
             type="submit"
-            disabled={loading || (!file)}
+            disabled={loading || !file}
             style={{ opacity: loading || !file ? 0.6 : 1 }}
           >
-            {loading ? "Generating..." : "Generate Reviewer"}
+            {loading ? "Generating…" : "Generate Reviewer"}
           </button>
         </form>
       </Section>
