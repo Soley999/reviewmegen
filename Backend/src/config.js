@@ -11,20 +11,20 @@ export const config = {
     apiKey: process.env.GEMINI_API_KEY || "",
     // Full model path as returned by the ListModels API (models/... prefix required
     // for models not yet promoted to the default v1beta namespace).
-    model: process.env.GEMINI_MODEL || "models/gemini-3.5-flash"
+    model: process.env.GEMINI_MODEL || "models/gemini-3.6-flash"
   },
 
   groq: {
     apiKey: process.env.GROQ_API_KEY || "",
-    model: process.env.GROQ_MODEL || "qwen/qwen3.8-27b"
+    model: process.env.GROQ_MODEL || "openai/gpt-oss-20b"
   },
 
-  // Safe per-call character limit — Gemini 1.5 Flash has 1M token context but
-  // we cap the content portion at ~60K chars (~15K tokens) so the full prompt +
-  // output fits comfortably within limits and avoids high latency.
-  // For large files we chunk and make multiple calls.
-  maxCharsPerChunk: Number(process.env.MAX_CHARS_PER_CHUNK || 60000),
+  // Per-call character budget for AI prompts.
+  // gemini-3.5-flash / qwen-27b both have large context windows.
+  // 200K chars (~50K tokens) keeps most documents as a single chunk
+  // while leaving room for the prompt template + output.
+  maxCharsPerChunk: Number(process.env.MAX_CHARS_PER_CHUNK || 200000),
 
-  // If the full text exceeds this, use chunked processing
-  chunkingThreshold: Number(process.env.CHUNKING_THRESHOLD || 60000)
+  // Kept for backwards compatibility with any env override
+  chunkingThreshold: Number(process.env.CHUNKING_THRESHOLD || 200000)
 };
