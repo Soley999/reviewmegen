@@ -1,10 +1,12 @@
 import dotenv from "dotenv";
 
-dotenv.config();
+if (!process.env.VERCEL) {
+  dotenv.config();
+}
 
 export const config = {
   port: Number(process.env.PORT || 4000),
-  clientOrigin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
+  clientOrigin: process.env.CLIENT_ORIGIN || (process.env.VERCEL ? "*" : "http://localhost:5173"),
   maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 200),
 
   gemini: {
