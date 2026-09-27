@@ -17,7 +17,7 @@ function Upload() {
   const [language, setLanguage] = useState("English");
 
   const [examEnabled, setExamEnabled] = useState(false);
-  const [examCount, setExamCount] = useState(20);
+  const [examCount, setExamCount] = useState(10);
   const [flashcardsEnabled, setFlashcardsEnabled] = useState(true);
 
   const [loading, setLoading] = useState(false);
@@ -157,10 +157,16 @@ function Upload() {
                       id="examCount"
                       type="number"
                       className="input"
-                      min={5}
+                      min={1}
                       max={100}
                       value={examCount}
-                      onChange={(e) => setExamCount(Math.max(5, Math.min(100, parseInt(e.target.value, 10) || 20)))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "") { setExamCount(""); return; }
+                        const num = parseInt(val, 10);
+                        if (!isNaN(num)) setExamCount(Math.max(1, Math.min(100, num)));
+                      }}
+                      onBlur={() => { if (!examCount || examCount < 1) setExamCount(10); }}
                       disabled={loading}
                       style={{ width: 120 }}
                     />

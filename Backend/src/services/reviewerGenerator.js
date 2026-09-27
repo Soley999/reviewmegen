@@ -333,7 +333,7 @@ export async function generateReviewer({ text, options, file }) {
   const difficulty = VALID_DIFFICULTY.has(options.difficulty) ? options.difficulty : "medium";
   const language = VALID_LANGUAGES.has(options.language) ? options.language : "English";
   const examEnabled = !!options.examEnabled;
-  const examCount = typeof options.examCount === "number" ? options.examCount : 20;
+  const examCount = typeof options.examCount === "number" ? options.examCount : 10;
   const flashcardsEnabled = options.flashcardsEnabled !== false;
 
   // ── Image input ─────────────────────────────────────────────────────────────
