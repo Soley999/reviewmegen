@@ -72,7 +72,7 @@ router.post("/", handleUpload, async (req, res, next) => {
     const examEnabled = req.body.examEnabled === "true";
     const examCount = Math.min(
       100,
-      Math.max(5, parseInt(req.body.examCount, 10) || 20)
+      Math.max(1, parseInt(req.body.examCount, 10) || 10)
     );
 
     // Parse flashcard option

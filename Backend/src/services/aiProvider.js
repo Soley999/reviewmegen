@@ -70,7 +70,15 @@ EXAM — STRICT RULES:
 - Each question MUST be answerable using only the provided content.
 - options[] must have EXACTLY 4 items.
 - answerIndex is 0-based. "answer" must equal options[answerIndex] character-for-character.
-- All 3 wrong options must be plausible but clearly distinguishable from the correct answer.
+- CRITICAL — OPTION LENGTH: Each option must be 1 short sentence (max 15-20 words). NEVER paste raw paragraphs, bullet lists, or multi-sentence blocks as an option. If a concept is complex, summarize it into one concise phrase.
+- CRITICAL — TRICKY DISTRACTORS: Wrong options must closely resemble the correct answer:
+  * Change one or two key words (swap a term, number, or qualifier).
+  * Use related but incorrect concepts from the same lesson.
+  * Reverse cause and effect, or swap subject and object.
+  * Use a partially correct statement that omits a critical detail.
+- All 4 options MUST be similar in length (within a few words of each other) and similar in phrasing style. If the correct answer is 8 words, all options should be roughly 6-10 words.
+- Do NOT use obviously wrong, absurd, or unrelated distractors. Every option should look plausible.
+- Do NOT dump raw text from the material as an option.
 - Do NOT repeat the same question.
 - "explanation" must quote or closely paraphrase the relevant passage from the content.
 - "wrongExplanations" must contain entries for every index EXCEPT answerIndex.
@@ -78,11 +86,15 @@ EXAM — STRICT RULES:
 
   const flashcardInstruction = flashcardsEnabled ? `
 FLASHCARDS — STRICT RULES:
-- One flashcard per distinct term or concept defined in the material.
-- "front": the term exactly as it appears in the material.
-- "back": the definition/explanation exactly as stated in the material (not a paraphrase).
-- "rationale": 1-2 sentences on why this concept matters in context; must reference the material.
-- Do NOT invent definitions. If no definition exists in the text, skip that term.
+- Create flashcards ONLY for content that is SPECIFIC to this material and would appear on an exam about it.
+- Good flashcard topics: specific definitions from the text, named processes/models/theories, formulas with variables explained, classifications/categories unique to the subject, cause-and-effect relationships stated in the material, named laws/principles/rules, specific dates/people/events mentioned.
+- BAD flashcard topics (DO NOT CREATE): general knowledge anyone would know without studying (e.g., "What is communication?", "What is a sentence?"), vague or broad terms (e.g., "Technology", "Science", "Learning"), section headings or chapter titles, words that are just common English vocabulary, anything not explicitly defined or explained in the material.
+- TEST: Before creating each flashcard, ask yourself: "Would a student need to study THIS SPECIFIC material to answer this?" If no, skip it.
+- "front": the specific concept, term, formula, or question from the material.
+- "back": the definition, explanation, or answer exactly as stated in the material (not a paraphrase, not general knowledge).
+- "rationale": 1-2 sentences on why this specific concept matters within the lesson; must reference the material.
+- Do NOT invent definitions. If the text does not provide a specific definition or explanation, skip that term.
+- Do NOT duplicate flashcards — each card must cover a unique concept.
 ` : "";
 
   return [
@@ -138,10 +150,10 @@ FLASHCARDS — STRICT RULES:
 
 function buildImagePrompt({ subject, difficulty, language, examEnabled, examCount, flashcardsEnabled }) {
   const examPart = examEnabled
-    ? `Also produce an "exam" object with exactly ${examCount} multiple-choice questions. Each question: "question", "options" (4 items), "answerIndex" (0-based), "answer" (= options[answerIndex] verbatim), "explanation", "wrongExplanations" (keys for every wrong index).`
+    ? `Also produce an "exam" object with exactly ${examCount} multiple-choice questions. Each question: "question", "options" (4 items), "answerIndex" (0-based), "answer" (= options[answerIndex] verbatim), "explanation", "wrongExplanations" (keys for every wrong index). Make wrong options tricky — similar wording to the correct answer with subtle differences, not obviously wrong.`
     : `Set "exam" to null.`;
   const fcPart = flashcardsEnabled
-    ? `Also produce "flashcards": one per term visible in the image, each with "front" (term), "back" (definition from the image), "rationale" (why it matters).`
+    ? `Also produce "flashcards": one per important concept, definition, formula, or process visible in the image. Each with "front" (the concept/term), "back" (definition/explanation from the image), "rationale" (why it matters for studying). Only include content SPECIFIC to this material that a student must study — skip general knowledge, common vocabulary, and trivial terms.`
     : `Set "flashcards" to [].`;
 
   return [
