@@ -42,10 +42,6 @@ function normalizeLesson(lesson) {
   };
 }
 
-/**
- * Validate and repair an exam question.
- * Returns null if the question is unrecoverable.
- */
 function validateExamQuestion(q) {
   if (!q || typeof q.question !== "string" || !q.question.trim()) return null;
 
@@ -53,20 +49,15 @@ function validateExamQuestion(q) {
   if (options.length !== 4) return null;
 
   let answerIndex = typeof q.answerIndex === "number" ? q.answerIndex : -1;
-
-  // If answerIndex is out of range, try to locate the answer string in options
   if (answerIndex < 0 || answerIndex > 3) {
     const answerText = String(q.answer || "").trim();
     answerIndex = options.findIndex((o) => o.trim() === answerText);
-    if (answerIndex === -1) return null; // can't determine correct answer
+    if (answerIndex === -1) return null;
   }
 
-  // Re-derive answer text from answerIndex (authoritative)
   const answer = options[answerIndex];
-
-  // Ensure all distractors are distinct from the correct answer
   const uniqueOptions = new Set(options.map((o) => o.trim()));
-  if (uniqueOptions.size < 4) return null; // duplicate options
+  if (uniqueOptions.size < 4) return null;
 
   const wrongExplanations = {};
   for (let i = 0; i < 4; i++) {
@@ -92,9 +83,7 @@ function validateExamQuestion(q) {
 
 function validateExam(exam) {
   if (!exam) return null;
-  const questions = normalizeArray(exam.questions)
-    .map(validateExamQuestion)
-    .filter(Boolean);
+  const questions = normalizeArray(exam.questions).map(validateExamQuestion).filter(Boolean);
   if (!questions.length) return null;
   return { description: exam.description || "Exam", questions };
 }
@@ -111,35 +100,34 @@ function normalizeFlashcard(fc) {
   };
 }
 
-function normalizeAiOutput(aiOutput) {
-  if (!aiOutput) return null;
+function normalizeAiOutput(raw) {
+  if (!raw) return null;
 
-  const lessons = normalizeArray(aiOutput.lessons).map(normalizeLesson).filter(Boolean);
-  const tableOfContents = normalizeArray(aiOutput.tableOfContents).length
-    ? normalizeArray(aiOutput.tableOfContents)
+  const lessons = normalizeArray(raw.lessons).map(normalizeLesson).filter(Boolean);
+  const tableOfContents = normalizeArray(raw.tableOfContents).length
+    ? normalizeArray(raw.tableOfContents)
     : lessons.map((l) => `Lesson ${l.lessonNumber}: ${l.title}`);
 
   return {
-    title: (typeof aiOutput.title === "string" && aiOutput.title.trim()) ? aiOutput.title.trim() : null,
+    title: (typeof raw.title === "string" && raw.title.trim()) ? raw.title.trim() : null,
     tableOfContents,
-    summaryShort: aiOutput.summaryShort || "",
-    summaryDetailed: aiOutput.summaryDetailed || "",
+    summaryShort: raw.summaryShort || "",
+    summaryDetailed: raw.summaryDetailed || "",
     lessons,
-    exam: validateExam(aiOutput.exam),
-    keyConcepts: normalizeArray(aiOutput.keyConcepts),
-    definitions: normalizeArray(aiOutput.definitions),
-    bullets: normalizeArray(aiOutput.bullets).filter((b) => typeof b === "string" && b.trim()),
-    flashcards: normalizeArray(aiOutput.flashcards).map(normalizeFlashcard).filter(Boolean),
-    outline: normalizeArray(aiOutput.outline),
-    highlightTerms: normalizeArray(aiOutput.highlightTerms).filter((t) => typeof t === "string" && t.trim())
+    exam: validateExam(raw.exam),
+    keyConcepts: normalizeArray(raw.keyConcepts),
+    definitions: normalizeArray(raw.definitions),
+    bullets: normalizeArray(raw.bullets).filter((b) => typeof b === "string" && b.trim()),
+    flashcards: normalizeArray(raw.flashcards).map(normalizeFlashcard).filter(Boolean),
+    outline: normalizeArray(raw.outline),
+    highlightTerms: normalizeArray(raw.highlightTerms).filter((t) => typeof t === "string" && t.trim())
   };
 }
 
-// ─── Large-file chunking ──────────────────────────────────────────────────────
+// ─── Chunking ─────────────────────────────────────────────────────────────────
 
 /**
- * Split text into chunks at sentence boundaries so each chunk fits within the
- * per-call character budget.
+ * Split text at sentence boundaries so each chunk stays within maxChars.
  */
 function chunkText(text, maxChars) {
   if (text.length <= maxChars) return [text];
@@ -160,9 +148,8 @@ function chunkText(text, maxChars) {
 }
 
 /**
- * Merge multiple AI outputs from chunked processing into a single output.
- * The first chunk provides the primary structure; subsequent chunks add their
- * lessons, concepts, definitions, and flashcards.
+ * Merge the AI outputs from multiple chunks into one coherent object.
+ * First chunk provides the primary structure; later chunks extend it.
  */
 function mergeAiOutputs(outputs) {
   const valid = outputs.filter(Boolean);
@@ -175,29 +162,25 @@ function mergeAiOutputs(outputs) {
     ...merged.keyConcepts.map((c) => c.term?.toLowerCase()),
     ...merged.definitions.map((d) => d.term?.toLowerCase())
   ]);
-
-  let lessonOffset = Math.max(...(merged.lessons.map((l) => l.lessonNumber)), 0);
+  let lessonOffset = Math.max(...merged.lessons.map((l) => l.lessonNumber), 0);
 
   for (let i = 1; i < valid.length; i++) {
     const chunk = valid[i];
 
-    // Append new lessons with re-numbered IDs
     for (const lesson of chunk.lessons || []) {
-      if (!seenLessonNumbers.has(lesson.lessonNumber + lessonOffset)) {
-        const newLesson = { ...lesson, lessonNumber: lesson.lessonNumber + lessonOffset };
-        merged.lessons.push(newLesson);
-        seenLessonNumbers.add(newLesson.lessonNumber);
+      const newNum = lesson.lessonNumber + lessonOffset;
+      if (!seenLessonNumbers.has(newNum)) {
+        merged.lessons.push({ ...lesson, lessonNumber: newNum });
+        seenLessonNumbers.add(newNum);
       }
     }
     lessonOffset += (chunk.lessons?.length || 0);
 
-    // Extend TOC
     merged.tableOfContents = [
       ...merged.tableOfContents,
-      ...(chunk.tableOfContents || []).slice(1) // skip duplicate title
+      ...(chunk.tableOfContents || []).slice(1)
     ];
 
-    // Merge key concepts, deduplicated by term
     for (const c of chunk.keyConcepts || []) {
       if (c.term && !seenTerms.has(c.term.toLowerCase())) {
         merged.keyConcepts.push(c);
@@ -211,12 +194,10 @@ function mergeAiOutputs(outputs) {
       }
     }
 
-    // Bullets and flashcards
     merged.bullets = [...(merged.bullets || []), ...(chunk.bullets || [])];
     merged.flashcards = [...(merged.flashcards || []), ...(chunk.flashcards || [])];
     merged.highlightTerms = [...new Set([...(merged.highlightTerms || []), ...(chunk.highlightTerms || [])])];
 
-    // Exam: keep the one with more questions
     if (!merged.exam && chunk.exam) merged.exam = chunk.exam;
     else if (chunk.exam?.questions?.length > (merged.exam?.questions?.length || 0)) {
       merged.exam = chunk.exam;
@@ -232,9 +213,8 @@ function titleCase(value) {
   return value.split(" ").map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(" ");
 }
 
-function buildLocalLesson(lessonText, lessonNumber, lessonTitle, subject) {
+function buildLocalLesson(lessonText, lessonNumber, lessonTitle) {
   const sentences = splitSentences(lessonText);
-  // Use definition-pattern extraction first, fall back to key term frequency
   const defPairs = extractDefinitionSentences(lessonText);
   const keyTerms = extractKeyTerms(lessonText, 8);
 
@@ -263,12 +243,9 @@ function buildLocalLesson(lessonText, lessonNumber, lessonTitle, subject) {
 
 function buildLocalReviewer(rawText, normalizedText, subject, difficulty, examEnabled, examCount, flashcardsEnabled) {
   const sentences = splitSentences(normalizedText);
-
-  // Definition-pattern extraction is far more accurate than simple word frequency
   const defPairs = extractDefinitionSentences(normalizedText);
   const keyTermsFromFreq = extractKeyTerms(normalizedText, 15);
 
-  // Build keyConcepts preferring definition-extracted pairs
   const seenTerms = new Set();
   const keyConcepts = [];
 
@@ -296,32 +273,56 @@ function buildLocalReviewer(rawText, normalizedText, subject, difficulty, examEn
   const lessonMarkers = identifyLessons(rawText);
   const lessonSections = splitTextIntoLessons(rawText, lessonMarkers);
   const lessons = lessonSections.map((sec) =>
-    buildLocalLesson(sec.text, sec.number, sec.title, subject)
+    buildLocalLesson(sec.text, sec.number, sec.title)
   );
-
-  const tableOfContents = lessons.map((l) => `Lesson ${l.lessonNumber}: ${l.title}`);
-
-  const exam = examEnabled
-    ? buildLocalExam({ keyConcepts, definitions, sentences, difficulty, examCount })
-    : null;
-
-  const flashcards = flashcardsEnabled ? buildLocalFlashcards(definitions, keyConcepts) : [];
-  const outline = buildOutline(summaryShort, keyConcepts, bullets);
 
   return {
     title: subject || "Untitled Reviewer",
-    tableOfContents,
+    tableOfContents: lessons.map((l) => `Lesson ${l.lessonNumber}: ${l.title}`),
     summaryShort,
     summaryDetailed,
     lessons,
-    exam,
+    exam: examEnabled ? buildLocalExam({ keyConcepts, definitions, sentences, difficulty, examCount }) : null,
     keyConcepts,
     definitions,
     bullets,
-    flashcards,
-    outline,
+    flashcards: flashcardsEnabled ? buildLocalFlashcards(definitions, keyConcepts) : [],
+    outline: buildOutline(summaryShort, keyConcepts, bullets),
     highlightTerms: keyConcepts.map((c) => c.term)
   };
+}
+
+// ─── AI chunk processing ──────────────────────────────────────────────────────
+
+/**
+ * Run AI on all chunks.
+ *
+ * Speed improvements over old approach:
+ * 1. Chunks run in PARALLEL with Promise.all — no serial waiting.
+ * 2. No local build is done before we know whether AI will succeed.
+ * 3. Exam/flashcards are only requested on chunk[0]; content-only on rest.
+ *
+ * Returns array of parsed AI outputs (nulls preserved for merge filtering).
+ */
+async function processChunksWithAI(chunks, { subject, difficulty, language, examEnabled, examCount, flashcardsEnabled }) {
+  const tasks = chunks.map((chunkText, i) =>
+    generateWithAI({
+      text: chunkText,
+      subject,
+      difficulty,
+      language,
+      // Only the first chunk gets exam/flashcards — avoids duplicates across chunks
+      examEnabled: i === 0 ? examEnabled : false,
+      examCount,
+      flashcardsEnabled: i === 0 ? flashcardsEnabled : false
+    }).catch((err) => {
+      console.warn(`[reviewerGenerator] chunk ${i + 1} failed: ${err.message}`);
+      return null;
+    })
+  );
+
+  console.log(`[reviewerGenerator] Processing ${chunks.length} chunk(s) in parallel`);
+  return Promise.all(tasks);
 }
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
@@ -332,10 +333,10 @@ export async function generateReviewer({ text, options, file }) {
   const difficulty = VALID_DIFFICULTY.has(options.difficulty) ? options.difficulty : "medium";
   const language = VALID_LANGUAGES.has(options.language) ? options.language : "English";
   const examEnabled = !!options.examEnabled;
-  const examCount = typeof options.examCount === "number" ? options.examCount : 20;
+  const examCount = typeof options.examCount === "number" ? options.examCount : 10;
   const flashcardsEnabled = options.flashcardsEnabled !== false;
 
-  // ── Handle image input ──────────────────────────────────────────────────────
+  // ── Image input ─────────────────────────────────────────────────────────────
   if (text && typeof text === "object" && text.__isImage) {
     const warnings = [];
     if (!aiIsConfigured()) {
@@ -365,74 +366,71 @@ export async function generateReviewer({ text, options, file }) {
     };
   }
 
-  // ── Handle text input ───────────────────────────────────────────────────────
+  // ── Text input ──────────────────────────────────────────────────────────────
   const rawText = String(text).replace(/\r\n/g, "\n").trim();
   const normalizedFull = normalizeText(rawText);
-
-  // Build local fallback from full text (always, used as baseline or sole result)
-  const local = buildLocalReviewer(rawText, normalizedFull, subject, difficulty, examEnabled, examCount, flashcardsEnabled);
-
   const warnings = [];
+  const textPreview = normalizedFull.slice(0, 600);
 
+  // No AI keys — skip directly to local build
   if (!aiIsConfigured()) {
     warnings.push("AI provider not configured — add GEMINI_API_KEY or GROQ_API_KEY to Backend/.env for richer results.");
-    return finalize({ reviewer: local, aiUsed: false, language, subject, tags, difficulty, examEnabled, flashcardsEnabled, file, warnings, textPreview: normalizedFull.slice(0, 600) });
+    const local = buildLocalReviewer(rawText, normalizedFull, subject, difficulty, examEnabled, examCount, flashcardsEnabled);
+    return finalize({ reviewer: local, aiUsed: false, language, subject, tags, difficulty, examEnabled, flashcardsEnabled, file, warnings, textPreview });
   }
 
-  // ── Chunked AI processing ───────────────────────────────────────────────────
+  // ── Parallel AI chunk processing ────────────────────────────────────────────
   const chunks = chunkText(normalizedFull, config.maxCharsPerChunk);
-  const isLarge = chunks.length > 1;
 
-  if (isLarge) {
+  if (chunks.length > 1) {
     warnings.push(`Document split into ${chunks.length} sections for complete processing.`);
+    console.log(`[reviewerGenerator] ${chunks.length} chunks, sizes: ${chunks.map((c) => c.length).join(", ")} chars`);
+  } else {
+    console.log(`[reviewerGenerator] Single chunk (${chunks[0].length} chars)`);
   }
 
-  const aiOutputs = [];
-  for (let i = 0; i < chunks.length; i++) {
-    console.log(`[reviewerGenerator] Processing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
-    const out = await generateWithAI({
-      text: chunks[i],
-      subject, difficulty, language,
-      // Only request exam/flashcards on the first chunk to avoid duplicates.
-      // For subsequent chunks we only want the content (lessons, concepts, defs).
-      examEnabled: i === 0 ? examEnabled : false,
-      examCount,
-      flashcardsEnabled: i === 0 ? flashcardsEnabled : false
-    });
-    aiOutputs.push(out);
-  }
+  const aiRawOutputs = await processChunksWithAI(chunks, { subject, difficulty, language, examEnabled, examCount, flashcardsEnabled });
 
-  const mergedAi = mergeAiOutputs(aiOutputs);
-  const aiNormalized = normalizeAiOutput(mergedAi);
+  const mergedRaw = mergeAiOutputs(aiRawOutputs);
+  const aiNormalized = normalizeAiOutput(mergedRaw);
 
+  // AI failed entirely — fall back to local NLP now (not before)
   if (!aiNormalized) {
     warnings.push("AI analysis failed — showing local extraction. Check your API keys and network.");
-    return finalize({ reviewer: local, aiUsed: false, language, subject, tags, difficulty, examEnabled, flashcardsEnabled, file, warnings, textPreview: normalizedFull.slice(0, 600) });
+    const local = buildLocalReviewer(rawText, normalizedFull, subject, difficulty, examEnabled, examCount, flashcardsEnabled);
+    return finalize({ reviewer: local, aiUsed: false, language, subject, tags, difficulty, examEnabled, flashcardsEnabled, file, warnings, textPreview });
   }
 
-  // Merge AI over local: AI wins wherever it has content, local fills gaps
+  // AI succeeded — use AI output; fill any empty fields from a lightweight local build
+  // We only run the local build here, after confirming AI didn't fully cover the output.
+  const needsLocalFill =
+    !aiNormalized.lessons?.length ||
+    !aiNormalized.keyConcepts?.length ||
+    !aiNormalized.bullets?.length;
+
+  let local = null;
+  if (needsLocalFill) {
+    local = buildLocalReviewer(rawText, normalizedFull, subject, difficulty, examEnabled, examCount, flashcardsEnabled);
+  }
+
   const reviewer = {
-    ...local,
+    ...(local || {}),
     ...aiNormalized,
-    title: aiNormalized.title || local.title,
-    lessons: aiNormalized.lessons?.length ? aiNormalized.lessons : local.lessons,
-    exam: aiNormalized.exam || local.exam,
-    keyConcepts: aiNormalized.keyConcepts?.length ? aiNormalized.keyConcepts : local.keyConcepts,
-    definitions: aiNormalized.definitions?.length ? aiNormalized.definitions : local.definitions,
-    bullets: aiNormalized.bullets?.length ? aiNormalized.bullets : local.bullets,
-    flashcards: aiNormalized.flashcards?.length ? aiNormalized.flashcards : local.flashcards,
-    outline: aiNormalized.outline?.length ? aiNormalized.outline : local.outline,
-    highlightTerms: aiNormalized.highlightTerms?.length ? aiNormalized.highlightTerms : local.highlightTerms
+    title: aiNormalized.title || subject,
+    lessons: aiNormalized.lessons?.length ? aiNormalized.lessons : local?.lessons || [],
+    exam: aiNormalized.exam || local?.exam || null,
+    keyConcepts: aiNormalized.keyConcepts?.length ? aiNormalized.keyConcepts : local?.keyConcepts || [],
+    definitions: aiNormalized.definitions?.length ? aiNormalized.definitions : local?.definitions || [],
+    bullets: aiNormalized.bullets?.length ? aiNormalized.bullets : local?.bullets || [],
+    flashcards: aiNormalized.flashcards?.length ? aiNormalized.flashcards : local?.flashcards || [],
+    outline: aiNormalized.outline?.length ? aiNormalized.outline : local?.outline || [],
+    highlightTerms: aiNormalized.highlightTerms?.length ? aiNormalized.highlightTerms : local?.highlightTerms || []
   };
 
-  if (language === "Tagalog" && !aiNormalized) {
-    warnings.push("Tagalog output requires an AI provider. The reviewer is in English.");
-  }
-
-  return finalize({ reviewer, aiUsed: true, language, subject, tags, difficulty, examEnabled, flashcardsEnabled, file, warnings, textPreview: normalizedFull.slice(0, 600) });
+  return finalize({ reviewer, aiUsed: true, language, subject, tags, difficulty, examEnabled, flashcardsEnabled, file, warnings, textPreview });
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function emptyResult({ subject, tags, difficulty, language, examEnabled, flashcardsEnabled, file, warnings }) {
   return {

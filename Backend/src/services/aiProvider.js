@@ -2,46 +2,38 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 import { config } from "../config.js";
 
-// ─── Shared utilities ────────────────────────────────────────────────────────
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function safeJsonParse(raw) {
   if (!raw) return null;
-
-  // Strip markdown code fences if the model wrapped its JSON in them
   let cleaned = raw.trim();
+  // Strip markdown fences if the model wrapped its response
   if (cleaned.startsWith("```")) {
     cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   }
-
   try {
     return JSON.parse(cleaned);
   } catch {
-    // Try to extract the outermost JSON object
     const start = cleaned.indexOf("{");
     const end = cleaned.lastIndexOf("}");
     if (start !== -1 && end > start) {
-      try {
-        return JSON.parse(cleaned.slice(start, end + 1));
-      } catch {
-        console.warn("[aiProvider] Could not parse AI response as JSON");
-        return null;
-      }
+      try { return JSON.parse(cleaned.slice(start, end + 1)); } catch { /* fall through */ }
     }
+    console.warn("[aiProvider] Could not parse AI response as JSON");
     return null;
   }
 }
 
-function hasAiKey() {
+export function aiIsConfigured() {
   return !!(config.gemini.apiKey || config.groq.apiKey);
 }
 
-// ─── Prompt builder ──────────────────────────────────────────────────────────
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-/**
- * Build the generation prompt.
- * The prompt is intentionally strict: the model must use ONLY the provided
- * content and must not invent facts, definitions, or answers.
- */
+// ─── Prompt builders ──────────────────────────────────────────────────────────
+
 function buildPrompt({ text, subject, difficulty, language, examEnabled, examCount, flashcardsEnabled }) {
   const examSchema = examEnabled ? `
   "exam": {
@@ -78,7 +70,15 @@ EXAM — STRICT RULES:
 - Each question MUST be answerable using only the provided content.
 - options[] must have EXACTLY 4 items.
 - answerIndex is 0-based. "answer" must equal options[answerIndex] character-for-character.
-- All 3 wrong options must be plausible but clearly distinguishable from the correct answer.
+- CRITICAL — OPTION LENGTH: Each option must be 1 short sentence (max 15-20 words). NEVER paste raw paragraphs, bullet lists, or multi-sentence blocks as an option. If a concept is complex, summarize it into one concise phrase.
+- CRITICAL — TRICKY DISTRACTORS: Wrong options must closely resemble the correct answer:
+  * Change one or two key words (swap a term, number, or qualifier).
+  * Use related but incorrect concepts from the same lesson.
+  * Reverse cause and effect, or swap subject and object.
+  * Use a partially correct statement that omits a critical detail.
+- All 4 options MUST be similar in length (within a few words of each other) and similar in phrasing style. If the correct answer is 8 words, all options should be roughly 6-10 words.
+- Do NOT use obviously wrong, absurd, or unrelated distractors. Every option should look plausible.
+- Do NOT dump raw text from the material as an option.
 - Do NOT repeat the same question.
 - "explanation" must quote or closely paraphrase the relevant passage from the content.
 - "wrongExplanations" must contain entries for every index EXCEPT answerIndex.
@@ -86,14 +86,18 @@ EXAM — STRICT RULES:
 
   const flashcardInstruction = flashcardsEnabled ? `
 FLASHCARDS — STRICT RULES:
-- One flashcard per distinct term or concept defined in the material.
-- "front": the term exactly as it appears in the material.
-- "back": the definition/explanation exactly as stated in the material (not a paraphrase).
-- "rationale": 1-2 sentences on why this concept matters in context; must reference the material.
-- Do NOT invent definitions. If no definition exists in the text, skip that term.
+- Create flashcards ONLY for content that is SPECIFIC to this material and would appear on an exam about it.
+- Good flashcard topics: specific definitions from the text, named processes/models/theories, formulas with variables explained, classifications/categories unique to the subject, cause-and-effect relationships stated in the material, named laws/principles/rules, specific dates/people/events mentioned.
+- BAD flashcard topics (DO NOT CREATE): general knowledge anyone would know without studying (e.g., "What is communication?", "What is a sentence?"), vague or broad terms (e.g., "Technology", "Science", "Learning"), section headings or chapter titles, words that are just common English vocabulary, anything not explicitly defined or explained in the material.
+- TEST: Before creating each flashcard, ask yourself: "Would a student need to study THIS SPECIFIC material to answer this?" If no, skip it.
+- "front": the specific concept, term, formula, or question from the material.
+- "back": the definition, explanation, or answer exactly as stated in the material (not a paraphrase, not general knowledge).
+- "rationale": 1-2 sentences on why this specific concept matters within the lesson; must reference the material.
+- Do NOT invent definitions. If the text does not provide a specific definition or explanation, skip that term.
+- Do NOT duplicate flashcards — each card must cover a unique concept.
 ` : "";
 
-  const lines = [
+  return [
     `You are an expert study-material analyzer. Your task is to create a STRUCTURED REVIEWER from the educational content below.`,
     ``,
     `ABSOLUTE RULES — violating any of these invalidates your response:`,
@@ -141,20 +145,15 @@ FLASHCARDS — STRICT RULES:
     `CONTENT TO ANALYZE:`,
     `---`,
     text
-  ];
-
-  return lines.join("\n");
+  ].join("\n");
 }
 
-/**
- * Build the image-analysis prompt.
- */
 function buildImagePrompt({ subject, difficulty, language, examEnabled, examCount, flashcardsEnabled }) {
   const examPart = examEnabled
-    ? `Also produce an "exam" object with exactly ${examCount} multiple-choice questions. Each question: "question", "options" (4 items), "answerIndex" (0-based), "answer" (= options[answerIndex] verbatim), "explanation", "wrongExplanations" (keys for every wrong index).`
+    ? `Also produce an "exam" object with exactly ${examCount} multiple-choice questions. Each question: "question", "options" (4 items), "answerIndex" (0-based), "answer" (= options[answerIndex] verbatim), "explanation", "wrongExplanations" (keys for every wrong index). Make wrong options tricky — similar wording to the correct answer with subtle differences, not obviously wrong.`
     : `Set "exam" to null.`;
   const fcPart = flashcardsEnabled
-    ? `Also produce "flashcards": one per term visible in the image, each with "front" (term), "back" (definition from the image), "rationale" (why it matters).`
+    ? `Also produce "flashcards": one per important concept, definition, formula, or process visible in the image. Each with "front" (the concept/term), "back" (definition/explanation from the image), "rationale" (why it matters for studying). Only include content SPECIFIC to this material that a student must study — skip general knowledge, common vocabulary, and trivial terms.`
     : `Set "flashcards" to [].`;
 
   return [
@@ -168,13 +167,10 @@ function buildImagePrompt({ subject, difficulty, language, examEnabled, examCoun
   ].join("\n");
 }
 
-// ─── Gemini provider ─────────────────────────────────────────────────────────
+// ─── Gemini ───────────────────────────────────────────────────────────────────
 
-/**
- * Ordered list of Gemini Flash models to try when the primary fails with 503.
- * All confirmed available on this project's v1beta endpoint.
- * The primary (config.gemini.model) is tried first; these are used only as fallbacks.
- */
+// All confirmed-working models on this project's key (validated 2025).
+// Primary from config is tried first; rest are fallbacks deduped at call time.
 const GEMINI_FALLBACK_CHAIN = [
   "models/gemini-3.5-flash",
   "models/gemini-3.6-flash",
@@ -182,116 +178,89 @@ const GEMINI_FALLBACK_CHAIN = [
 ];
 
 /**
- * Sleep helper for exponential back-off.
+ * Call one Gemini model. Retries once on 503 after 1.5 s.
+ * Returns parsed JSON or null (parse failure).
+ * Throws for non-transient errors (404, auth, etc.) so the chain can skip.
  */
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Call a single Gemini model. Returns parsed JSON or null.
- * Retries once on 503 (high-load) with a short delay before giving up on that model.
- */
-async function callGeminiModel(modelId, content) {
+async function callOneGeminiModel(modelId, content) {
   const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
   const model = genAI.getGenerativeModel({
     model: modelId,
-    // responseMimeType is intentionally omitted: newer flash models (3.x) return
-    // empty content when that constraint is set. We rely on the strict JSON-only
-    // prompt + safeJsonParse which already strips markdown fences.
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 8192
-    }
+    // responseMimeType omitted: 3.x flash models return empty string when set.
+    // Strict JSON-only prompt + safeJsonParse handles parsing instead.
+    generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
   });
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const result = await model.generateContent(content);
-      const text = result.response.text();
-      const parsed = safeJsonParse(text);
+      const parsed = safeJsonParse(result.response.text());
       if (parsed) return parsed;
-      console.warn(`[aiProvider] Gemini ${modelId} returned unparseable content (attempt ${attempt})`);
-      return null; // bad JSON — no point retrying with same model
+      console.warn(`[gemini] ${modelId} — unparseable response`);
+      return null; // not retryable
     } catch (err) {
-      const is503 = err.status === 503 || err.message?.includes("503");
+      const status = err.status ?? 0;
+      const msg = String(err.message ?? "");
+      const is503 = status === 503 || msg.includes("503");
+      const is429 = status === 429 || msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate");
+      if (is429) {
+        // Hard quota limit — no point retrying this model, skip to next immediately
+        console.warn(`[gemini] ${modelId} — 429 rate-limited, skipping to next model`);
+        throw err;
+      }
       if (is503 && attempt === 1) {
-        console.warn(`[aiProvider] Gemini ${modelId} 503 on attempt 1 — waiting 1.5s before retry`);
+        // Transient overload — one retry after a short wait is worth it
+        console.warn(`[gemini] ${modelId} — 503, retrying in 1.5 s`);
         await sleep(1500);
         continue;
       }
-      throw err; // re-throw for the caller to handle (404, auth, etc.)
+      throw err; // re-throw so outer chain can classify and skip
     }
   }
   return null;
 }
 
-async function callGeminiText(prompt) {
-  // Build the ordered model chain: configured model first, then fallbacks (deduped)
+/**
+ * Walk the Gemini model chain.
+ * Returns parsed JSON data on success, or null if every model fails.
+ * Does NOT touch Groq — that is callAI()'s responsibility.
+ */
+async function tryAllGeminiModels(content) {
   const primary = config.gemini.model;
   const chain = [primary, ...GEMINI_FALLBACK_CHAIN.filter((m) => m !== primary)];
 
   for (const modelId of chain) {
     try {
-      const result = await callGeminiModel(modelId, prompt);
-      if (result) {
-        if (modelId !== primary) {
-          console.log(`[aiProvider] Gemini succeeded on fallback model: ${modelId}`);
-        }
-        return result;
+      const data = await callOneGeminiModel(modelId, content);
+      if (data) {
+        console.log(`[aiProvider] ✓ provider=gemini  model=${modelId}`);
+        return data;
       }
+      console.warn(`[gemini] ${modelId} — no usable output, trying next model`);
     } catch (err) {
-      const is503 = err.status === 503 || err.message?.includes("503");
-      const is404 = err.status === 404 || err.message?.includes("404");
-      if (is503) {
-        console.warn(`[aiProvider] Gemini ${modelId} still 503 after retry — trying next model`);
-      } else if (is404) {
-        console.warn(`[aiProvider] Gemini ${modelId} 404 (not available on this key) — trying next model`);
-      } else {
-        console.warn(`[aiProvider] Gemini ${modelId} error: ${err.message} — trying next model`);
-      }
+      const code = err.status ?? "?";
+      console.warn(`[gemini] ${modelId} — error ${code}: ${String(err.message).slice(0, 80)} — trying next model`);
     }
   }
 
-  console.warn("[aiProvider] All Gemini models exhausted");
+  console.warn("[gemini] All Gemini models exhausted");
   return null;
 }
 
-async function callGeminiVision({ base64, mimeType, textPrompt }) {
-  // Use the configured model for vision; fall back to gemini-3.5-flash which
-  // confirmed supports inlineData on this project's key.
-  const primary = config.gemini.model;
-  const visionChain = [primary, ...GEMINI_FALLBACK_CHAIN.filter((m) => m !== primary)];
+// ─── Groq ─────────────────────────────────────────────────────────────────────
 
-  for (const modelId of visionChain) {
-    try {
-      const result = await callGeminiModel(modelId, [
-        { text: textPrompt },
-        { inlineData: { mimeType, data: base64 } }
-      ]);
-      if (result) return result;
-    } catch (err) {
-      const is503 = err.status === 503 || err.message?.includes("503");
-      const is404 = err.status === 404 || err.message?.includes("404");
-      if (is503 || is404) {
-        console.warn(`[aiProvider] Gemini vision ${modelId} ${err.status} — trying next model`);
-      } else {
-        console.warn(`[aiProvider] Gemini vision ${modelId} error: ${err.message}`);
-        break; // non-transient error (e.g. image too large) — stop trying
-      }
-    }
-  }
+// Confirmed-working Groq models for this key (validated 2025).
+// Primary from config is tried first; rest are fallbacks.
+const GROQ_FALLBACK_CHAIN = [
+  "openai/gpt-oss-20b",
+  "openai/gpt-oss-120b",
+  "qwen/qwen3.8-27b"
+];
 
-  return null;
-}
-
-// ─── Groq provider ───────────────────────────────────────────────────────────
-
-async function callGroq(prompt) {
+async function callOneGroqModel(modelId, prompt) {
   const groq = new Groq({ apiKey: config.groq.apiKey });
-
   const completion = await groq.chat.completions.create({
-    model: config.groq.model,
+    model: modelId,
     temperature: 0.1,
     max_tokens: 8000,
     response_format: { type: "json_object" },
@@ -303,82 +272,125 @@ async function callGroq(prompt) {
       { role: "user", content: prompt }
     ]
   });
-
-  const content = completion.choices?.[0]?.message?.content;
-  return safeJsonParse(content);
+  const raw = completion.choices?.[0]?.message?.content;
+  return safeJsonParse(raw);
 }
 
-// ─── Provider dispatcher ─────────────────────────────────────────────────────
+async function tryGroq(prompt) {
+  const primary = config.groq.model;
+  const chain = [primary, ...GROQ_FALLBACK_CHAIN.filter((m) => m !== primary)];
 
-/**
- * Try Gemini first, fall back to Groq if Gemini fails or is not configured.
- */
-async function callAI(prompt) {
-  // Try Gemini
-  if (config.gemini.apiKey) {
+  for (const modelId of chain) {
     try {
-      const result = await callGeminiText(prompt);
-      if (result) {
-        console.log("[aiProvider] Gemini succeeded");
-        return result;
+      const data = await callOneGroqModel(modelId, prompt);
+      if (data) {
+        console.log(`[aiProvider] ✓ provider=groq  model=${modelId}`);
+        return data;
       }
-      console.warn("[aiProvider] Gemini returned null/empty response");
+      console.warn(`[groq] ${modelId} — no usable output, trying next model`);
     } catch (err) {
-      console.warn("[aiProvider] Gemini failed:", err.message || err);
+      const status = err.status ?? 0;
+      const msg = String(err.message ?? "");
+      const is429 = status === 429 || msg.includes("429") || msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("quota");
+      console.warn(`[groq] ${modelId} — ${is429 ? "429 rate-limited" : `error ${status}`}, trying next model`);
     }
   }
 
-  // Fall back to Groq
+  console.warn("[groq] All Groq models exhausted");
+  return null;
+}
+
+// ─── Provider dispatcher ──────────────────────────────────────────────────────
+
+/**
+ * Try Gemini first; if ALL Gemini models fail, immediately fall back to Groq.
+ *
+ * Returns the parsed JSON data directly (plain object), or null.
+ * The provider used is logged to the console.
+ */
+async function callAI(prompt) {
+  // 1. Gemini
+  if (config.gemini.apiKey) {
+    const data = await tryAllGeminiModels(prompt);
+    if (data) return data;
+    // Every Gemini model failed — fall through to Groq right now
+    if (config.groq.apiKey) {
+      console.warn("[aiProvider] Gemini exhausted — falling back to Groq");
+    }
+  }
+
+  // 2. Groq fallback
   if (config.groq.apiKey) {
     try {
-      const result = await callGroq(prompt);
-      if (result) {
-        console.log("[aiProvider] Groq succeeded");
-        return result;
+      const data = await tryGroq(prompt);
+      if (data) {
+        console.log(`[aiProvider] ✓ provider=groq  model=${config.groq.model}`);
+        return data;
       }
       console.warn("[aiProvider] Groq returned null/empty response");
     } catch (err) {
-      console.warn("[aiProvider] Groq failed:", err.message || err);
+      console.warn(`[aiProvider] Groq failed: ${err.message}`);
     }
   }
 
   return null;
 }
 
-// ─── Public API ──────────────────────────────────────────────────────────────
+// ─── Vision (Gemini only — Groq has no vision API) ────────────────────────────
 
+async function callGeminiVision({ base64, mimeType, textPrompt }) {
+  const primary = config.gemini.model;
+  const chain = [primary, ...GEMINI_FALLBACK_CHAIN.filter((m) => m !== primary)];
+
+  for (const modelId of chain) {
+    try {
+      const data = await callOneGeminiModel(modelId, [
+        { text: textPrompt },
+        { inlineData: { mimeType, data: base64 } }
+      ]);
+      if (data) {
+        console.log(`[aiProvider] ✓ provider=gemini-vision  model=${modelId}`);
+        return data;
+      }
+    } catch (err) {
+      const is503 = err.status === 503 || String(err.message).includes("503");
+      const is404 = err.status === 404 || String(err.message).includes("404");
+      if (is503 || is404) {
+        console.warn(`[aiProvider] Gemini vision ${modelId} — ${err.status}, trying next`);
+      } else {
+        console.warn(`[aiProvider] Gemini vision ${modelId} — non-transient error, stopping: ${err.message}`);
+        break;
+      }
+    }
+  }
+  return null;
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Generate reviewer JSON from text.
+ * Returns the parsed data object directly, or null on total failure.
+ */
 export async function generateWithAI({ text, subject, difficulty, language, examEnabled, examCount, flashcardsEnabled }) {
-  if (!hasAiKey()) return null;
-
+  if (!aiIsConfigured()) return null;
   const prompt = buildPrompt({ text, subject, difficulty, language, examEnabled, examCount, flashcardsEnabled });
   return callAI(prompt);
 }
 
 /**
- * Generate reviewer from an image.
- * Gemini only — Groq does not support vision.
+ * Generate reviewer JSON from an image (Gemini vision only).
+ * Returns the parsed data object directly, or null on failure.
  */
 export async function generateWithAIVision({ base64, mimeType, subject, difficulty, language, examEnabled, examCount, flashcardsEnabled }) {
   if (!config.gemini.apiKey) return null;
-
   const textPrompt = buildImagePrompt({ subject, difficulty, language, examEnabled, examCount, flashcardsEnabled });
-
   try {
-    const result = await callGeminiVision({ base64, mimeType, textPrompt });
-    if (result) {
-      console.log("[aiProvider] Gemini vision succeeded");
-      return result;
-    }
-    console.warn("[aiProvider] Gemini vision returned null/empty");
+    const data = await callGeminiVision({ base64, mimeType, textPrompt });
+    if (!data) console.warn("[aiProvider] Gemini vision returned null/empty");
+    return data;
   } catch (err) {
-    console.warn("[aiProvider] Gemini vision failed:", err.message || err);
+    console.warn("[aiProvider] Gemini vision failed:", err.message);
+    return null;
   }
-  return null;
-}
-
-/**
- * Exposed so reviewerGenerator can check without calling.
- */
-export function aiIsConfigured() {
-  return hasAiKey();
 }
