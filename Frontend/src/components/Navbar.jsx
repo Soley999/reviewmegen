@@ -13,6 +13,9 @@ function Navbar() {
         <Link className="nav-pill" to="/dashboard">
           Dashboard
         </Link>
+        <Link className="nav-pill" to="/about">
+          About Us
+        </Link>
       </div>
     </nav>
   );
