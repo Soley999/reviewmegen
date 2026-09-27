@@ -5,6 +5,7 @@ import Home from "./pages/Home.jsx";
 import Upload from "./pages/Upload.jsx";
 import Results from "./pages/Results.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import About from "./pages/About.jsx";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/upload" element={<Upload />} />
           <Route path="/results" element={<Results />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/about" element={<About />} />
         </Routes>
       </main>
       <Footer />
